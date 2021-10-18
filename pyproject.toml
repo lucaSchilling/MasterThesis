@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "masterthesis"
+version = "0.1.0"
+description = ""
+authors = ["Luca Schilling"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+tensorflow = "2.5"
+simpleitk = {path = "../../GlobalPackages/build/SimpleITK-build/Wrapping/Python/Packaging"}
+pym2aia-pkg-jtfcordes = {git = "git@github.com:jtfcordes/pyM2aia.git", rev = "main"}
+yapf = "^0.31.0"
+toml = "^0.10.2"
+neurite = "^0.1"
+airlab = {git = "git@github.com:lucaSchilling/airlab.git", develop = true}
+ipywidgets = "^7.6.4"
+torch = "1.7.1"
+voxelmorph = {git = "git@github.com:lucaSchilling/voxelmorph.git", rev = "master", develop = true}
+seaborn = "^0.11.2"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.yapfignore]
+ignore_patterns = [
+  "poetry.lock",
+  "pyproject.toml",
+  "README.md"
+]
+[tool.yapf]
+based_on_style = "pep8"
+spaces_before_comment = 4
+split_before_logical_operator = true
