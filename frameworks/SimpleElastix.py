@@ -19,17 +19,10 @@ class SimpleElastix(ImageRegistrationInterface):
         elastix_image_filter.SetMovingImage(moving_image)
         parameter_map_vector = sitk.VectorOfParameterMap()
         affine_parameter = sitk.GetDefaultParameterMap("affine")
-        affine_parameter['NumberOfResolutions'] = ['3']
         affine_parameter['ImageSampler'] = ['Random']
         affine_parameter['Transform'] = ['EulerTransform']
         if loss == 'MSE':
             affine_parameter['Metric'] = ['AdvancedMeanSquares']
-            affine_parameter['FixedImagePyramid'] = [
-                "FixedRecursiveImagePyramid"
-            ]
-            affine_parameter['MovingImagePyramid'] = [
-                "MovingRecursiveImagePyramid"
-            ]
         elif loss == 'MI':
             affine_parameter['Metric'] = ['AdvancedMattesMutualInformation']
         affine_parameter['Optimizer'] = ['AdaptiveStochasticGradientDescent']
@@ -41,7 +34,6 @@ class SimpleElastix(ImageRegistrationInterface):
         affine_parameter['NumberOfSpatialSamples'] = ['15000']
 
         # Optional but will reduce time by 75% without worsen the result
-        affine_parameter['MaximumNumberOfIterations'] = ['500']
         affine_parameter['DefaultPixelValue'] = [f'{default_value}']
         affine_parameter['Interpolator'] = ['LinearInterpolator']
         affine_parameter['ResampleInterpolator'] = ['FinalLinearInterpolator']

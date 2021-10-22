@@ -1,12 +1,12 @@
 import json
-
+from discord_logger import log
 from DataHandler import DataHandler
 from VoxelmorphTF import train_vxm_model
 #from VoxelmorphTorch import train_vxm_model
 
 batch_size = 8
 batch_size_val = 12
-epochs = 30
+epochs = 200
 steps = 100
 learning_rate = 0.001
 resampling = False
@@ -18,7 +18,7 @@ if dataset == 'synthetic':
         fixed_path=
         '/home/lschilling/datam2olie/synthetic/orig/t3/Synthetic_CT/',
         moving_path=
-        '/home/lschilling/datam2olie/synthetic/orig/t1/Synthetic_CT/')
+        '/home/lschilling/datam2olie/synthetic/orig/t1/Synthetic_CBCT/')
 elif dataset == 'mnist':
     dh.get_mnist_data(select_number=5)
 else:
@@ -37,14 +37,15 @@ val_generator = dh.data_gen_voxelmorph(data_x=dh.x_val,
                                        batch_size=batch_size_val,
                                        shuffle=False)
 
-model_name = f'ep{epochs}_st{steps}_lr{str(learning_rate).replace(".", "_")}_bat{batch_size}{"withResampling" if resampling else ""}'
+model_name = f'cbct_ct_ep{epochs}_st{steps}_lr{str(learning_rate).replace(".", "_")}_bat{batch_size}{"withResampling" if resampling else ""}'
 
-vxm_model, hist, model_name = train_vxm_model(train_generator,
-                                              val_generator,
-                                              multi_gpu=multi_gpu,
-                                              steps_per_epoch=steps,
-                                              learning_rate=learning_rate,
-                                              loss='MSE',
-                                              model_name=model_name,
-                                              dataset=dataset,
-                                              epochs=epochs)
+model_path = train_vxm_model(train_generator,
+                             val_generator,
+                             multi_gpu=multi_gpu,
+                             steps_per_epoch=steps,
+                             learning_rate=learning_rate,
+                             loss='MSE',
+                             model_name=model_name,
+                             dataset=dataset,
+                             epochs=epochs)
+log(f'Finished training model was save to {model_path}')

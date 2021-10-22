@@ -7,6 +7,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from voxelmorph.tf.utils import point_spatial_transformer
 from tensorflow.keras.callbacks import TensorBoard
 
+from discord_logger import log
 from frameworks.ImageRegistrationInterface import ImageRegistrationInterface
 
 # Seed value
@@ -82,10 +83,11 @@ def train_vxm_model(train_generator,
     output_path = os.path.join(
         '/home/lschilling/PycharmProjects/MasterThesis/models', dataset,
         model_name)
+    log(f'Finished training model was save to {output_path}')
     if not os.path.exists(output_path):
         os.mkdir(output_path)
-    json.dump(start_time - end_time,
-              open(os.path.join(output_path, 'train_time.json', 'w')))
+    json.dump(end_time - start_time,
+              open(os.path.join(output_path, 'train_time.json'), 'w'))
     json.dump(hist.history, open(os.path.join(output_path, 'hist.json'), 'w'))
     vxm_model.save_weights(os.path.join(output_path, 'weights.h5'))
     return os.path.join(output_path, 'weights.h5')

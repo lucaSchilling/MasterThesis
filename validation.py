@@ -66,7 +66,8 @@ def get_moved_points(points: np.array, displacement: sitk.Image) -> np.array:
 
 framework_name = 'vxmtf'
 dataset = 'synthetic'
-model_name = '/home/lschilling/PycharmProjects/image_registration_thesis/models/test_model_30_100_8batch'
+model_path = '/home/lschilling/PycharmProjects/image_registration_thesis/models/test_model_30_100_8batch'
+model_name = os.path.basename(model_path)
 if framework_name == 'vxmtf':
     from frameworks.VoxelmorphTF import VoxelmorphTF
     from frameworks.VoxelmorphTorch import VoxelmorphTorch
@@ -99,7 +100,7 @@ for (idx, _) in enumerate(moving_image_paths):
     moving_image = sitk.ReadImage(moving_image_paths[idx])
     fixed_image = sitk.ReadImage(fixed_image_paths[idx])
     moved_image, displacement, time = framework.register_images(
-        fixed_image, moving_image, weights_path=model_name)
+        fixed_image, moving_image, weights_path=model_path)
     jacobian = get_jacobian_np(displacement)
     jacobian_reflections_list.append(len(jacobian[jacobian < 0]))
     time_list.append(time)
@@ -107,21 +108,29 @@ for (idx, _) in enumerate(moving_image_paths):
     if dataset == 'synthetic':
         moving_landmarks, fixed_landmarks = get_landmarks(
             fixed_image_paths[idx], indexing='zyx')
-        moved_landmarks_vxmtf = framework.get_moved_points(
-            fixed_landmarks, displacement)
-        moved_landmarks = get_moved_points(fixed_landmarks, displacement)
-        tre_test = get_tre(moving_landmarks, moved_landmarks)
-        tre_list.append(get_tre(moving_landmarks, moved_landmarks_vxmtf))
-        tre_non_reg_list.append(
-            get_tre_non_reg(moving_landmarks, fixed_landmarks))
+        moving_landmarks_xyz, fixed_landmarks_xyz = get_landmarks(
+            fixed_image_paths[idx], indexing='xyz')
+        moved_landmarks = framework.get_moved_points(fixed_landmarks,
+                                                     displacement)
+        moved_landmarks_sitk = get_moved_points(fixed_landmarks_xyz,
+                                                displacement)
+        tre_test = get_tre(moving_landmarks_xyz, moved_landmarks_sitk)
         print(stats.describe(tre_test))
-        print(stats.describe(tre_list[0]))
-        print(stats.describe(tre_non_reg_list[0]))
+        tre_non_reg_test = get_tre_non_reg(moving_landmarks_xyz,
+                                           fixed_landmarks_xyz)
+        print(stats.describe(tre_non_reg_test))
+
+        tre = get_tre(moving_landmarks, moved_landmarks)
+        tre_non_reg = get_tre_non_reg(moving_landmarks, fixed_landmarks)
+        tre_list.append(tre.mean())
+        tre_non_reg_list.append(tre_non_reg.mean())
+        print(stats.describe(tre))
+        print(stats.describe(tre_non_reg))
         pass
 
 output_path = os.path.join(
     '/home/lschilling/PycharmProjects/MasterThesis/models', dataset,
-    model_name if model_name else framework_name)
+    (model_name if model_name else framework_name))
 if not os.path.exists(output_path):
     os.mkdir(output_path)
 

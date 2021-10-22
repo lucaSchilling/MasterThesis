@@ -1,6 +1,7 @@
 import json
 import os
 
+from discord_logger import log
 from frameworks.ImageRegistrationInterface import ImageRegistrationInterface
 
 os.environ['VXM_BACKEND'] = 'pytorch'
@@ -180,10 +181,11 @@ def train_vxm_model(train_generator,
     output_path = os.path.join(
         '/home/lschilling/PycharmProjects/MasterThesis/models', dataset,
         model_name)
+    log(f'Finished training model was save to {output_path}')
     if not os.path.exists(output_path):
         os.mkdir(output_path)
-    json.dump(start_time - end_time,
-              open(os.path.join(output_path, 'train_time.json', 'w')))
+    json.dump(end_time - start_time,
+              open(os.path.join(output_path, 'train_time.json'), 'w'))
     # final model save
     model.save(os.path.join(output_path, 'model.pt'))
     return os.path.join(output_path, 'model.pt')

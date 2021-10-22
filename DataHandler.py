@@ -92,7 +92,7 @@ class DataHandler:
                 composite_transform.AddTransform(transform)
             resampler.SetTransform(composite_transform)
             return sitk.GetArrayFromImage(resampler.Execute(image))
-        return image
+        return sitk.GetArrayFromImage(image)
 
     def get_synthetic_data(self,
                            fixed_path: str,
