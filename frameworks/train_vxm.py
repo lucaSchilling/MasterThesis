@@ -1,8 +1,7 @@
 import json
-from discord_logger import log
 from DataHandler import DataHandler
-from VoxelmorphTF import train_vxm_model
-#from VoxelmorphTorch import train_vxm_model
+#from VoxelmorphTF import train_vxm_model
+from VoxelmorphTorch import train_vxm_model
 
 batch_size = 8
 batch_size_val = 12
@@ -10,7 +9,7 @@ epochs = 200
 steps = 100
 learning_rate = 0.001
 resampling = False
-dataset = 'synthetic'
+dataset = 'mnist'
 multi_gpu = True
 dh = DataHandler()
 if dataset == 'synthetic':
@@ -37,7 +36,7 @@ val_generator = dh.data_gen_voxelmorph(data_x=dh.x_val,
                                        batch_size=batch_size_val,
                                        shuffle=False)
 
-model_name = f'cbct_ct_ep{epochs}_st{steps}_lr{str(learning_rate).replace(".", "_")}_bat{batch_size}{"withResampling" if resampling else ""}'
+model_name = f'ep{epochs}_st{steps}_lr{str(learning_rate).replace(".", "_")}_bat{batch_size}{"withResampling" if resampling else ""}'
 
 model_path = train_vxm_model(train_generator,
                              val_generator,
@@ -48,4 +47,3 @@ model_path = train_vxm_model(train_generator,
                              model_name=model_name,
                              dataset=dataset,
                              epochs=epochs)
-log(f'Finished training model was save to {model_path}')

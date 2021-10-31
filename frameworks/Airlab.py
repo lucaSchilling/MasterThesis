@@ -20,7 +20,7 @@ class Airlab(ImageRegistrationInterface):
                         gpu='1') -> {sitk.Image, sitk.Image, int}:
 
         # set the used data type
-        dtype = th.float64
+        dtype = th.float32
         device = th.device(f"cuda:{gpu}")
 
         fixed_image = al.Image(sitk.Cast(fixed_image, sitk.sitkFloat32), dtype,
@@ -33,7 +33,7 @@ class Airlab(ImageRegistrationInterface):
 
         # choose the affine transformation model
         transformation = al.transformation.pairwise.AffineTransformation(
-            moving_image, opt_cm=True)
+            moving_image, opt_cm=False)
         # transformation = al.transformation.pairwise.RigidTransformation(moving_image, opt_cm=False)
         transformation.init_translation(fixed_image)
         registration.set_transformation(transformation)
@@ -58,7 +58,7 @@ class Airlab(ImageRegistrationInterface):
 
         registration.set_optimizer(optimizer)
         # registration.set_number_of_iterations(500)
-        registration.set_number_of_iterations(50)
+        registration.set_number_of_iterations(500)
 
         # start the registration
         start_time = time.time()
@@ -80,6 +80,9 @@ class Airlab(ImageRegistrationInterface):
 
         displacement = al.transformation.utils.unit_displacement_to_displacement(
             unit_displacement)
-        displacement = sitk.GetImageFromArray(displacement.cpu(),
+        displacement = displacement.permute(2, 1, 0, 3)
+        #displacement = displacement.permute(2, 1, 0)
+        displacement = sitk.GetImageFromArray(displacement.type(
+            th.float64).cpu(),
                                               isVector=True)
         return moved_image.itk(), displacement, end_time - start_time

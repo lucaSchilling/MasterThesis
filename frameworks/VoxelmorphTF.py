@@ -1,8 +1,10 @@
 import json
 import time
+from pickletools import dis
 
 import SimpleITK as sitk
 import voxelmorph as vxm
+from ipywidgets import fixed
 from tensorflow.keras.callbacks import EarlyStopping
 from voxelmorph.tf.utils import point_spatial_transformer
 from tensorflow.keras.callbacks import TensorBoard
@@ -114,7 +116,6 @@ def get_vxm_model(fixed_image, loss='MSE', learning_rate=0.001):
         raise NotImplementedError(
             f'{loss} is not implemented yet please select one of the following losses [MSE, NCC]'
         )
-    # losses = [vxm.losses.NMI(bin_centers=np.linspace(0, 1, 32), vol_size=inshape).loss, vxm.losses.Grad('l2').loss]
 
     # usually, we have to balance the two losses by a hyper-parameter
     loss_weights = [1, 0.05]
@@ -137,20 +138,26 @@ class VoxelmorphTF(ImageRegistrationInterface):
         model = get_vxm_model(fixed_image)
         model.load_weights(weights_path)
         start_time = time.time()
-        moved_image, displacement = model.predict(
+        moved_image_np, displacement = model.predict(
             [moving_image_np, fixed_image_np])
         end_time = time.time()
+        moved_image = sitk.GetImageFromArray(np.squeeze(moved_image_np))
+        moved_image.SetSpacing(fixed_image.GetSpacing())
+        moved_image.SetOrigin(fixed_image.GetOrigin())
+        #displacement = np.swapaxes(displacement, 1, -2)
         displacement = sitk.GetImageFromArray(np.squeeze(displacement).astype(
             np.float64),
                                               isVector=True)
-        return sitk.GetImageFromArray(
-            np.squeeze(moved_image)), displacement, end_time - start_time
+        displacement.SetSpacing(fixed_image.GetSpacing())
+        displacement.SetOrigin(fixed_image.GetOrigin())
+        return moved_image, displacement, end_time - start_time
 
     @staticmethod
     def get_moved_points(fixed_landmarks: np.array,
                          displacement: sitk.Image) -> np.array:
         fixed_landmarks = fixed_landmarks[np.newaxis, ...].astype('float32')
         displacement_np = sitk.GetArrayFromImage(displacement)
+        displacement_np = np.swapaxes(displacement_np, 0, 2)
         displacement_np = displacement_np[np.newaxis, ...].astype('float32')
         # obtain moved_image_landmarks
         moved_landmarks = point_spatial_transformer(

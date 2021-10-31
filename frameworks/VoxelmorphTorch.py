@@ -1,7 +1,8 @@
 import json
 import os
 
-from discord_logger import log
+from scipy.constants import value
+from torch import nn
 from frameworks.ImageRegistrationInterface import ImageRegistrationInterface
 
 os.environ['VXM_BACKEND'] = 'pytorch'
@@ -26,7 +27,10 @@ class VoxelmorphTorch(ImageRegistrationInterface):
         device = th.device(f'cuda:{gpu}')
         moving_image_np = sitk.GetArrayFromImage(moving_image)[np.newaxis, :]
         fixed_image_np = sitk.GetArrayFromImage(fixed_image)[np.newaxis, :]
-        model = vxm.networks.VxmDense.load(weights_path, device=device)
+        #model = vxm.networks.VxmDense.load(weights_path, device=device)
+        model = get_vxm_model(fixed_image, gpu)
+        state_dict = th.load(weights_path)
+        model.load_state_dict(state_dict=state_dict)
         model.to(device)
         model.eval()
 
@@ -41,13 +45,43 @@ class VoxelmorphTorch(ImageRegistrationInterface):
                                           registration=True)
         end_time = time.time()
         if fixed_image.GetDimension() == 3:
-            displacement = sitk.GetImageFromArray(displacement, isVector=True)
+            displacement = sitk.GetImageFromArray(displacement.permute(
+                0, 2, 3, 4,
+                1).squeeze().cpu().detach().numpy().astype(np.float64),
+                                                  isVector=True)
         if fixed_image.GetDimension() == 2:
             displacement = sitk.GetImageFromArray(displacement.permute(
-                0, 2, 3, 1).squeeze().cpu().detach().numpy(),
+                0, 2, 3,
+                1).squeeze().cpu().detach().numpy().astype(np.float64),
                                                   isVector=True)
-        return sitk.GetImageFromArray(moved_image.squeeze().cpu().detach(
-        ).numpy()), displacement, end_time - start_time
+        moved_image = sitk.GetImageFromArray(
+            moved_image.squeeze().cpu().detach().numpy())
+        moved_image.SetSpacing(fixed_image.GetSpacing())
+        moved_image.SetOrigin(fixed_image.GetOrigin())
+        return moved_image, displacement, end_time - start_time
+
+
+def get_vxm_model(fixed_image, gpu):
+    fixed_image_np = sitk.GetArrayFromImage(fixed_image)
+    inshape = fixed_image_np.shape
+
+    device = th.device(f'cuda:{gpu}')
+
+    # configure unet features
+    nb_features = [
+        [16, 32, 32, 32],    # encoder features
+        [32, 32, 32, 32, 32, 16, 16]    # decoder features
+    ]
+    int_downsize = 2
+    model = vxm.networks.VxmDense(inshape=inshape,
+                                  nb_unet_features=nb_features,
+                                  bidir=False,
+                                  int_steps=7,
+                                  int_downsize=int_downsize)
+
+    # prepare the model for training and send to device
+    model.to(device)
+    return model
 
 
 def train_vxm_model(train_generator,
@@ -75,12 +109,13 @@ def train_vxm_model(train_generator,
         [16, 32, 32, 32],    # encoder features
         [32, 32, 32, 32, 32, 16, 16]    # decoder features
     ]
-    int_downsize = 1
-    model = vxm.networks.VxmDense(inshape=inshape,
-                                  nb_unet_features=nb_features,
-                                  bidir=False,
-                                  int_steps=0,
-                                  int_downsize=int_downsize)
+    int_downsize = 2
+    model = nn.DataParallel(
+        vxm.networks.VxmDense(inshape=inshape,
+                              nb_unet_features=nb_features,
+                              bidir=False,
+                              int_steps=7,
+                              int_downsize=int_downsize))
 
     # prepare the model for training and send to device
     model.to(device)
@@ -111,7 +146,7 @@ def train_vxm_model(train_generator,
         f'../runs/logs/{dataset}/vxmth_{model_name}/validation')
     # training loops
     for epoch in range(0, epochs):
-        best_model.save(os.path.join(model_dir, 'best_model.pt'))
+        #best_model.save(os.path.join(model_dir, 'best_model.pt'))
 
         epoch_loss = []
         epoch_total_loss = []
@@ -130,13 +165,13 @@ def train_vxm_model(train_generator,
                 for image in y_true
             ]
             y_true[0] = y_true[0]
-            y_true[1] = y_true[1].permute(0, 4, 2, 3, 1)
-            y_true[1] = y_true[1].squeeze(4)
+            y_true[1] = y_true[1].permute(0, 5, 2, 3, 4, 1)
+            y_true[1] = y_true[1].squeeze(5)
 
             # run inputs through the model to produce a warped image and flow field
             y_pred = model(*inputs)
 
-            y_pred = [image.unsqueeze(4) for image in y_pred]
+            #y_pred = [image.unsqueeze(4) for image in y_pred]
 
             # calculate the total loss
             loss = 0
@@ -171,6 +206,47 @@ def train_vxm_model(train_generator,
                                               losses_info)
             print(' '.join((epoch_info, step_info, time_info, loss_info)),
                   flush=True)
+        # calculate the total val loss
+        val_loss = 0
+        val_loss_list = []
+        val_epoch_loss = []
+        val_epoch_total_loss = []
+        val_data = next(val_generator)
+        for idx, data in enumerate(val_data):
+            inputs, y_true = next(train_generator)
+            inputs = [
+                th.from_numpy(image).to(device).float().unsqueeze(1)
+                for image in inputs
+            ]
+            y_true = [
+                th.from_numpy(image).to(device).float().unsqueeze(1)
+                for image in y_true
+            ]
+            y_true[0] = y_true[0]
+            y_true[1] = y_true[1].permute(0, 5, 2, 3, 4, 1)
+            y_true[1] = y_true[1].squeeze(5)
+
+            # run inputs through the model to produce a warped image and flow field
+            y_pred = model(*inputs)
+
+            #y_pred = [image.unsqueeze(4) for image in y_pred]
+            for idx, loss_function in enumerate(losses):
+                curr_loss = loss_function(y_true[idx],
+                                          y_pred[idx]) * weights[idx]
+                val_loss_list.append('%.6f' % curr_loss.item())
+                val_loss += curr_loss
+            val_epoch_loss.append(loss_list)
+            val_epoch_total_loss.append(loss.item())
+        val_epoch_losses = [
+            '%.6f' % f
+            for f in np.mean(np.array(epoch_loss, dtype=np.float), axis=0)
+        ]
+        val_writer.add_scalar('epoch_loss', np.mean(val_epoch_total_loss),
+                              epoch)
+        val_writer.add_scalar('epoch_flow_loss', float(val_epoch_losses[0]),
+                              epoch)
+        val_writer.add_scalar('epoch_transformer_loss',
+                              float(val_epoch_losses[1]), epoch)
         train_writer.add_scalar('epoch_loss', np.mean(epoch_total_loss), epoch)
         train_writer.add_scalar('epoch_flow_loss', float(epoch_losses[0]),
                                 epoch)
@@ -181,11 +257,10 @@ def train_vxm_model(train_generator,
     output_path = os.path.join(
         '/home/lschilling/PycharmProjects/MasterThesis/models', dataset,
         model_name)
-    log(f'Finished training model was save to {output_path}')
     if not os.path.exists(output_path):
         os.mkdir(output_path)
     json.dump(end_time - start_time,
               open(os.path.join(output_path, 'train_time.json'), 'w'))
     # final model save
-    model.save(os.path.join(output_path, 'model.pt'))
+    th.save(model.module.state_dict(), os.path.join(output_path, 'model.pt'))
     return os.path.join(output_path, 'model.pt')
